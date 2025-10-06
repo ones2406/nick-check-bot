@@ -26,12 +26,14 @@ def fetch_products():
     soup = BeautifulSoup(r.text, "html.parser")
 
     products = []
-    # tìm div có class chứa "rounded-lg"
-    items = soup.find_all("div", class_=lambda x: x and "rounded-lg" in x)
+    # Lấy toàn bộ div, rồi lọc class có chứa "rounded-lg"
+    for div in soup.find_all("div"):
+        classes = div.get("class", [])
+        if "rounded-lg" not in classes:
+            continue
 
-    for item in items:
-        name_tag = item.find("h2")
-        h4_tags = item.find_all("h4")
+        name_tag = div.find("h2")
+        h4_tags = div.find_all("h4")
         if not name_tag or len(h4_tags) < 2:
             continue
 
@@ -68,7 +70,7 @@ def main():
         return
 
     if not products:
-        send_telegram("⚠️ Không tìm thấy sản phẩm nào!")
+        send_telegram("⚠️ Không tìm thấy sản phẩm nào! (parser không match HTML)")
         return
 
     state = load_state()
@@ -80,22 +82,17 @@ def main():
         new_state[name] = remain
         old_remain = state.get(name)
 
-        # Nếu trước còn hàng, giờ = 0 → báo ngay
         if old_remain is not None and old_remain > 0 and remain == 0:
             alerts.append(f"🚨 <b>{name}</b> đã <u>hết hàng</u>!")
-
-        # Nếu lần đầu đã thấy nó hết hàng → cũng báo
         if old_remain is None and remain == 0:
             alerts.append(f"🚨 <b>{name}</b> hiện đang <u>hết hàng</u>!")
 
-    # Gửi cảnh báo hết hàng ngay lập tức
     if alerts:
         send_telegram("\n".join(alerts))
 
-    # Gửi báo cáo tổng hợp vào 12h trưa & 12h đêm hoặc khi chạy tay
     now = datetime.now()
     if now.hour in (0, 12) or os.environ.get("MANUAL_RUN") == "1":
-        report_lines = ["📊 <b>Báo cáo tồn kho</b>"]
+        report_lines = [f"📊 <b>Báo cáo tồn kho ({len(products)} sản phẩm)</b>"]
         for p in products:
             report_lines.append(f"- {p['name']}: còn {p['remain']} (đã bán {p['sold']})")
         send_telegram("\n".join(report_lines))
