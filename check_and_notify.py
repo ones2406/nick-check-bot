@@ -1,6 +1,5 @@
 import requests
 from bs4 import BeautifulSoup
-import os
 from datetime import datetime
 import pytz
 
@@ -16,7 +15,7 @@ def send_telegram(msg: str):
     except Exception as e:
         print("Telegram error:", e)
 
-def fetch_all_products():
+def fetch_random_products():
     r = requests.get(URL, timeout=30)
     soup = BeautifulSoup(r.text, "html.parser")
     products = []
@@ -27,31 +26,40 @@ def fetch_all_products():
         remain = div.find("span", class_="text-red-500")
 
         if name and sold and remain:
-            products.append({
-                "name": name.text.strip(),
-                "sold": int(sold.text.strip().replace(",", "")),
-                "remain": int(remain.text.strip().replace(",", ""))
-            })
-
+            pname = name.text.strip()
+            if pname.startswith("Nick random thông tin xấu - thông tin đẹp"):
+                products.append({
+                    "name": pname,
+                    "sold": int(sold.text.strip().replace(",", "")),
+                    "remain": int(remain.text.strip().replace(",", ""))
+                })
     return products
 
 def main():
     tz = pytz.timezone("Asia/Ho_Chi_Minh")
     now = datetime.now(tz)
 
-    products = fetch_all_products()
+    products = fetch_random_products()
 
     if not products:
-        send_telegram("⚠️ Không tìm thấy sản phẩm nào trên trang!")
+        send_telegram("⚠️ Không tìm thấy chuyên mục <b>Nick random thông tin xấu - thông tin đẹp</b>")
         return
 
-    # Gửi toàn bộ danh sách sản phẩm về Telegram
+    # Sắp xếp để nhìn gọn gàng (nếu có 6 mục)
+    products = sorted(products, key=lambda x: x["name"])
+
+    # Báo cáo
     msg = (
-        f"📋 <b>DANH SÁCH SẢN PHẨM</b>\n"
-        f"🕒 {now.strftime('%H:%M %d/%m/%Y')}\n\n"
+        f"📊 <b>BÁO CÁO CHUYÊN MỤC</b>\n"
+        f"🕒 {now.strftime('%H:%M %d/%m/%Y')}\n"
+        f"📂 Nick random thông tin xấu - thông tin đẹp\n\n"
     )
-    for p in products:
-        msg += f"🎯 {p['name']}\n   ├ 🟢 Còn lại: <b>{p['remain']}</b>\n   └ 📈 Đã bán: <b>{p['sold']}</b>\n\n"
+    for i, p in enumerate(products, 1):
+        msg += (
+            f"#{i} 🎯 <b>{p['name']}</b>\n"
+            f"   ├ 🟢 Còn lại: <b>{p['remain']}</b>\n"
+            f"   └ 📈 Đã bán: <b>{p['sold']}</b>\n\n"
+        )
 
     send_telegram(msg.strip())
 
