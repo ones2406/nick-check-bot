@@ -4,8 +4,8 @@ import requests
 from bs4 import BeautifulSoup
 
 # ==== Config Telegram ====
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_BOT_TOKEN = os.getenv("8265932226:AAE8ki950o1FmQ2voDqIk7UDJaYPIolnWU0", "")
+CHAT_ID = os.getenv("7520535840", "")
 
 # ==== Config trang web ====
 URL = "https://shopnick.vnroblox.com/shop/roblox"   # thay link đúng của bạn
