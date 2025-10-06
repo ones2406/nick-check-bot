@@ -1,63 +1,100 @@
-import re
+import os
 import json
 import requests
 from bs4 import BeautifulSoup
-import os
 
-# === CẤU HÌNH BOT TELEGRAM ===
-BOT_TOKEN = "8265932226:AAE8ki950o1FmQ2voDqIk7UDJaYPIolnWU0"
-CHAT_ID = "7520535840"
+# ==== Config Telegram ====
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# === TRANG WEB CẦN CHECK ===
-URL = "https://cypher289.shop/home"
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+# ==== Config trang web ====
+URL = "https://shopnick.vnroblox.com/shop/roblox"   # thay link đúng của bạn
+STATE_FILE = "last_state.json"
 
-STATE_FILE = "last_state.json"  # lưu trạng thái lần trước
 
-def send_message(text):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown"}
-    requests.post(url, data=payload, timeout=10)
+def send_message(text: str):
+    """Gửi tin nhắn Telegram"""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": text,
+        "parse_mode": "Markdown"
+    }
+    try:
+        r = requests.post(url, json=payload)
+        if r.status_code != 200:
+            print("❌ Telegram error:", r.text)
+        else:
+            print("✅ Sent to Telegram")
+    except Exception as e:
+        print("❌ Send message failed:", e)
 
-def parse_number(text, keyword):
-    m = re.search(rf"{keyword}\s*[:\-]?\s*([0-9]+)", text, re.IGNORECASE)
-    return int(m.group(1)) if m else None
 
 def fetch_products():
-    res = requests.get(URL, headers=HEADERS, timeout=15)
-    res.raise_for_status()
-    soup = BeautifulSoup(res.text, "html.parser")
-
+    """Lấy danh sách sản phẩm từ trang web"""
     products = {}
-    for h2 in soup.find_all("h2"):
-        name = h2.get_text(strip=True)
-        h4 = h2.find_next("h4")
-        info = h4.get_text(" ", strip=True) if h4 else ""
-        sold = parse_number(info, "Đã Bán")
-        remain = parse_number(info, "Còn")
+    try:
+        res = requests.get(URL, timeout=20)
+        res.raise_for_status()
+    except Exception as e:
+        print("❌ Fetch error:", e)
+        return products
+
+    soup = BeautifulSoup(res.text, "html.parser")
+    items = soup.find_all("div", class_="p-4")  # chỉnh selector theo web thực tế
+
+    for item in items:
+        name_tag = item.find("h2")
+        sold_tag = item.find("span", class_="text-gray-500")
+        remain_tag = item.find("span", class_="text-red-500")
+
+        name = name_tag.text.strip() if name_tag else "Unknown"
+        sold = None
+        remain = None
+
+        if sold_tag:
+            try:
+                sold = int("".join(filter(str.isdigit, sold_tag.text)))
+            except:
+                pass
+        if remain_tag:
+            try:
+                remain = int("".join(filter(str.isdigit, remain_tag.text)))
+            except:
+                pass
+
         products[name] = {"sold": sold, "remain": remain}
     return products
 
+
 def load_state():
-    if os.path.exists(STATE_FILE):
+    """Đọc trạng thái cũ từ file"""
+    if not os.path.exists(STATE_FILE):
+        return {}
+    try:
         with open(STATE_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    return {}
+    except:
+        return {}
+
 
 def save_state(state):
+    """Lưu trạng thái mới"""
     with open(STATE_FILE, "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False)
+        json.dump(state, f, ensure_ascii=False, indent=2)
+
 
 def main():
     products = fetch_products()
-    state = load_state()
+    if not products:
+        send_message("⚠️ Không lấy được dữ liệu sản phẩm!")
+        return
 
-    # Xác định cách chạy
+    state = load_state()
     event = os.getenv("GITHUB_EVENT_NAME", "")
 
-    # Nếu chạy theo lịch cron (12h trưa / 12h đêm) => gửi báo cáo
-    if event == "schedule":
-        now_utc_hour = int(os.getenv("GITHUB_RUN_ATTEMPT", "0"))  # placeholder
+    # === 1. Luôn gửi báo cáo khi chạy tay hoặc theo lịch ===
+    if event in ["schedule", "workflow_dispatch"]:
         report_lines = ["📊 *BÁO CÁO TỒN KHO* 📊\n"]
         for name, data in products.items():
             line = f"🔹 {name}\n"
@@ -68,19 +105,21 @@ def main():
             report_lines.append(line)
         send_message("\n".join(report_lines))
 
-    # Kiểm tra hết hàng mới
+    # === 2. Báo hết hàng mới hoặc hết ngay lần đầu ===
     alerts = []
     for name, data in products.items():
         remain = data["remain"]
         old_remain = state.get(name, {}).get("remain")
-        if remain == 0 and old_remain and old_remain > 0:
-            alerts.append(f"⚠️ *{name}* vừa hết nick!")
+
+        if remain == 0 and (old_remain is None or old_remain > 0):
+            alerts.append(f"⚠️ *{name}* đã hết nick!")
 
     if alerts:
         send_message("\n".join(alerts))
 
-    # Lưu trạng thái
+    # === 3. Lưu trạng thái mới ===
     save_state(products)
+
 
 if __name__ == "__main__":
     main()
