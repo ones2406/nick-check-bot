@@ -3,19 +3,21 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
 
+# Cấu hình bot
 BOT_TOKEN = "8265932226:AAE8ki950o1FmQ2voDqIk7UDJaYPIolnWU0"
 CHAT_ID = "7520535840"
 URL = "https://cypher289.shop/home"
 
 def send_telegram(msg: str):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    try:
-        r = requests.post(url, data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "HTML"}, timeout=30)
-        print("Telegram response:", r.text)
-    except Exception as e:
-        print("Telegram error:", e)
+    r = requests.post(url, data={
+        "chat_id": CHAT_ID,
+        "text": msg,
+        "parse_mode": "HTML"
+    })
+    print("Telegram response:", r.text)
 
-def fetch_random_products():
+def fetch_all_products():
     r = requests.get(URL, timeout=30)
     soup = BeautifulSoup(r.text, "html.parser")
     products = []
@@ -27,50 +29,55 @@ def fetch_random_products():
 
         if name and sold and remain:
             pname = name.text.strip()
-            pname_lower = pname.lower()
-
-            # Cho phép nhiều cách ghi khác nhau
-            if "nick random thông tin xấu" in pname_lower and "thông tin đẹp" in pname_lower:
-                products.append({
-                    "name": pname,
-                    "sold": int(sold.text.strip().replace(",", "")),
-                    "remain": int(remain.text.strip().replace(",", ""))
-                })
+            products.append({
+                "name": pname,
+                "sold": int(sold.text.strip().replace(",", "")),
+                "remain": int(remain.text.strip().replace(",", ""))
+            })
     return products
 
 def main():
     tz = pytz.timezone("Asia/Ho_Chi_Minh")
     now = datetime.now(tz)
-
-    products = fetch_random_products()
+    products = fetch_all_products()
 
     if not products:
-        send_telegram("⚠️ Không tìm thấy chuyên mục <b>Nick random thông tin xấu - thông tin đẹp</b>\n👉 Có thể tên hiển thị hơi khác, cần kiểm tra lại.")
+        send_telegram("⚠️ Không tìm thấy sản phẩm nào trên web!")
         return
 
-    products = sorted(products, key=lambda x: x["name"])
-
+    # Header ngầu
     msg = (
-        f"📊 <b>BÁO CÁO CHUYÊN MỤC</b>\n"
+        "🚀 <b>DANH SÁCH TOÀN BỘ SẢN PHẨM</b>\n"
         f"🕒 {now.strftime('%H:%M %d/%m/%Y')}\n"
-        f"📂 Nick random thông tin xấu - thông tin đẹp\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
     )
+
     total_sold = 0
     total_remain = 0
 
     for i, p in enumerate(products, 1):
         msg += (
-            f"#{i} 🎯 <b>{p['name']}</b>\n"
-            f"   ├ 🟢 Còn lại: <b>{p['remain']}</b>\n"
-            f"   └ 📈 Đã bán: <b>{p['sold']}</b>\n\n"
+            f"#{i} 🔥 <b>{p['name']}</b>\n"
+            f"   🟢 Còn lại: <code>{p['remain']}</code>\n"
+            f"   📈 Đã bán: <code>{p['sold']}</code>\n"
+            "━━━━━━━━━━━━━━\n"
         )
         total_sold += p["sold"]
         total_remain += p["remain"]
 
-    msg += f"📦 <b>Tổng còn lại:</b> {total_remain}\n"
-    msg += f"🔥 <b>Tổng đã bán:</b> {total_sold}"
+        # Chia nhỏ message nếu quá dài
+        if len(msg) > 3500:
+            send_telegram(msg)
+            msg = ""
 
-    send_telegram(msg.strip())
+    # Tổng kết
+    msg += (
+        "\n📦 <b>TỔNG KẾT</b>\n"
+        f"   🟢 Tổng còn lại: <b>{total_remain}</b>\n"
+        f"   🔥 Tổng đã bán: <b>{total_sold}</b>\n"
+    )
+
+    send_telegram(msg)
 
 if __name__ == "__main__":
     main()
