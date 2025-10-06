@@ -74,7 +74,7 @@ def main():
     state = load_state()
     new_state = {}
     alerts = []
-
+    
     for p in products:
         name = p["name"]
         remain = p["remain"]
