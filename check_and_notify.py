@@ -27,7 +27,10 @@ def fetch_random_products():
 
         if name and sold and remain:
             pname = name.text.strip()
-            if pname.startswith("Nick random thông tin xấu - thông tin đẹp"):
+            pname_lower = pname.lower()
+
+            # Cho phép nhiều cách ghi khác nhau
+            if "nick random thông tin xấu" in pname_lower and "thông tin đẹp" in pname_lower:
                 products.append({
                     "name": pname,
                     "sold": int(sold.text.strip().replace(",", "")),
@@ -42,24 +45,30 @@ def main():
     products = fetch_random_products()
 
     if not products:
-        send_telegram("⚠️ Không tìm thấy chuyên mục <b>Nick random thông tin xấu - thông tin đẹp</b>")
+        send_telegram("⚠️ Không tìm thấy chuyên mục <b>Nick random thông tin xấu - thông tin đẹp</b>\n👉 Có thể tên hiển thị hơi khác, cần kiểm tra lại.")
         return
 
-    # Sắp xếp để nhìn gọn gàng (nếu có 6 mục)
     products = sorted(products, key=lambda x: x["name"])
 
-    # Báo cáo
     msg = (
         f"📊 <b>BÁO CÁO CHUYÊN MỤC</b>\n"
         f"🕒 {now.strftime('%H:%M %d/%m/%Y')}\n"
         f"📂 Nick random thông tin xấu - thông tin đẹp\n\n"
     )
+    total_sold = 0
+    total_remain = 0
+
     for i, p in enumerate(products, 1):
         msg += (
             f"#{i} 🎯 <b>{p['name']}</b>\n"
             f"   ├ 🟢 Còn lại: <b>{p['remain']}</b>\n"
             f"   └ 📈 Đã bán: <b>{p['sold']}</b>\n\n"
         )
+        total_sold += p["sold"]
+        total_remain += p["remain"]
+
+    msg += f"📦 <b>Tổng còn lại:</b> {total_remain}\n"
+    msg += f"🔥 <b>Tổng đã bán:</b> {total_sold}"
 
     send_telegram(msg.strip())
 
