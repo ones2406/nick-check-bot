@@ -1,22 +1,24 @@
-name: Check stock and notify
+name: Check Stock
 
 on:
   schedule:
-    # mỗi 10 phút kiểm tra hết nick
+    # Mỗi 10 phút kiểm tra
     - cron: "*/10 * * * *"
-    # 12h trưa VN (UTC+7 -> UTC 5h)
+    # 12h trưa VN (UTC+7 = 05:00 UTC)
     - cron: "0 5 * * *"
-    # 12h đêm VN (UTC+7 -> UTC 17h)
+    # 12h đêm VN (UTC+7 = 17:00 UTC)
     - cron: "0 17 * * *"
   workflow_dispatch:
 
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
 
-      - name: Set up Python
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.x"
@@ -24,5 +26,5 @@ jobs:
       - name: Install dependencies
         run: pip install requests beautifulsoup4
 
-      - name: Run script
+      - name: Run check script
         run: python check_and_notify.py
