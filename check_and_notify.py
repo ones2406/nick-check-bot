@@ -1,37 +1,21 @@
 import requests
-from bs4 import BeautifulSoup
-import os
 
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-URL = "https://cypher289.shop/home"
+# ====== THÔNG TIN (đã gắn sẵn) ======
+BOT_TOKEN = "8265932226:AAE8ki950o1FmQ2voDqIk7UDJaYPIolnWU0"
+CHAT_ID = "7520535840"
+# =====================================
 
 def send_message(text):
-    requests.post(
-        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-        json={"chat_id": CHAT_ID, "text": text}
-    )
-
-def main():
-    res = requests.get(URL)
-    res.encoding = "utf-8"
-    soup = BeautifulSoup(res.text, "html.parser")
-
-    empty_items = []
-
-    cards = soup.find_all("div", class_="card")  # cần chỉnh chính xác class
-    for card in cards:
-        text = card.get_text(" ", strip=True)
-        if "Bán Hết" in text or "Còn 0 Nick" in text:
-            empty_items.append(text)
-
-    if empty_items:
-        msg = "⚠️ Các mục đã hết nick:\n" + "\n".join(empty_items)
-        send_message(msg)
-        print("Đã gửi thông báo:", msg)
-    else:
-        print("✅ Chưa có mục nào hết nick.")
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": text}
+    try:
+        response = requests.post(url, data=payload, timeout=15)
+        if response.status_code != 200:
+            print("Lỗi khi gửi tin nhắn:", response.status_code, response.text)
+        else:
+            print("Đã gửi tin nhắn thành công.")
+    except Exception as e:
+        print("Exception khi gọi Telegram API:", str(e))
 
 if __name__ == "__main__":
-    main()
+    send_message("✅ Bot đã kết nối thành công và gửi test message!")
