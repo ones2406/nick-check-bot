@@ -9,31 +9,34 @@ BOT_TOKEN = "8265932226:AAE8ki950o1FmQ2voDqIk7UDJaYPIolnWU0"
 CHAT_ID = "7520535840"
 URL = "https://cypher289.shop/home"
 STATE_FILE = "last_state.json"
+TARGET_PRODUCT = "Nick random thông tin xấu - thông tin đẹp"
 
 def send_telegram(msg: str):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     try:
         r = requests.post(url, data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "HTML"}, timeout=30)
-        print("Telegram response:", r.text)   # DEBUG
+        print("Telegram response:", r.text)
     except Exception as e:
         print("Telegram error:", e)
 
-def fetch_products():
+def fetch_target_product():
     r = requests.get(URL, timeout=30)
     soup = BeautifulSoup(r.text, "html.parser")
-    products = []
 
     for div in soup.find_all("div", class_=lambda x: x and "rounded-lg" in x):
         name = div.find("h2")
         sold = div.find("span", class_="text-primary-500")
         remain = div.find("span", class_="text-red-500")
+
         if name and sold and remain:
-            products.append({
-                "name": name.text.strip(),
-                "sold": int(sold.text.strip().replace(",", "")),
-                "remain": int(remain.text.strip().replace(",", ""))
-            })
-    return products
+            product_name = name.text.strip()
+            if TARGET_PRODUCT.lower() in product_name.lower():
+                return {
+                    "name": product_name,
+                    "sold": int(sold.text.strip().replace(",", "")),
+                    "remain": int(remain.text.strip().replace(",", ""))
+                }
+    return None
 
 def load_state():
     if os.path.exists(STATE_FILE):
@@ -46,30 +49,31 @@ def save_state(state):
         json.dump(state, f, ensure_ascii=False, indent=2)
 
 def main():
-    products = fetch_products()
-    if not products:
-        send_telegram("⚠️ Không tìm thấy sản phẩm nào! (parser không match HTML)")
+    product = fetch_target_product()
+    if not product:
+        send_telegram(f"⚠️ Không tìm thấy sản phẩm: {TARGET_PRODUCT}")
         return
 
     state = load_state()
-    new_state = {}
+    new_state = {product["name"]: product["remain"]}
     tz = pytz.timezone("Asia/Ho_Chi_Minh")
     now = datetime.now(tz)
     hour = now.hour
 
-    report_lines = [f"📦 Báo cáo tồn kho ({now.strftime('%H:%M %d/%m/%Y')})"]
+    # 🚨 Cảnh báo hết hàng
+    if product["remain"] == 0 and state.get(product["name"], 1) > 0:
+        send_telegram(f"🚨 <b>{product['name']}</b> đã <u>HẾT HÀNG</u>!")
 
-    for p in products:
-        new_state[p["name"]] = p["remain"]
-        report_lines.append(f"- {p['name']}: còn {p['remain']} | đã bán {p['sold']}")
-
-        # cảnh báo hết hàng
-        if p["remain"] == 0 and state.get(p["name"], 1) > 0:
-            send_telegram(f"🚨 {p['name']} đã hết hàng!")
-
-    # gửi báo cáo vào 0h và 12h
+    # 📊 Báo cáo tồn kho lúc 0h, 12h hoặc khi chạy tay
     if hour in [0, 12] or os.getenv("GITHUB_EVENT_NAME") == "workflow_dispatch":
-        send_telegram("\n".join(report_lines))
+        report = (
+            f"📊 <b>BÁO CÁO TỒN KHO</b>\n"
+            f"🕒 {now.strftime('%H:%M %d/%m/%Y')}\n\n"
+            f"🎯 <b>{product['name']}</b>\n"
+            f"   ├ 🟢 Còn lại: <b>{product['remain']}</b>\n"
+            f"   └ 📈 Đã bán: <b>{product['sold']}</b>"
+        )
+        send_telegram(report)
 
     save_state(new_state)
 
