@@ -26,7 +26,8 @@ def fetch_products():
     soup = BeautifulSoup(r.text, "html.parser")
 
     products = []
-    items = soup.find_all("div", class_="rounded-lg")
+    # tìm div có class chứa "rounded-lg"
+    items = soup.find_all("div", class_=lambda x: x and "rounded-lg" in x)
 
     for item in items:
         name_tag = item.find("h2")
