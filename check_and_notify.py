@@ -1,124 +1,105 @@
-import os
-import json
 import requests
 from bs4 import BeautifulSoup
+import json
+import os
+from datetime import datetime
 
-# ==== Config Telegram (đã gắn trực tiếp) ====
-TELEGRAM_BOT_TOKEN = "8265932226:AAE8ki950o1FmQ2voDqIk7UDJaYPIolnWU0"
-CHAT_ID = "7520535840"   # chat id của bạn (lấy từ JSON)
-
-# ==== Config trang web ====
-URL = "https://shopnick.vnroblox.com/shop/roblox"   # thay link đúng của bạn
+# ==== Config ====
+BOT_TOKEN = "8265932226:AAE8ki950o1FmQ2voDqIk7UDJaYPIolnWU0"
+CHAT_ID = "7520535840"
 STATE_FILE = "last_state.json"
+URL = "https://cypher289.shop/home"
 
-
-def send_message(text: str):
-    """Gửi tin nhắn Telegram"""
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
+# ==== Gửi tin nhắn Telegram ====
+def send_telegram(message: str):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": message, "parse_mode": "HTML"}
     try:
-        r = requests.post(url, json=payload)
-        if r.status_code != 200:
-            print("❌ Telegram error:", r.text)
-        else:
-            print("✅ Sent to Telegram")
+        requests.post(url, data=payload, timeout=15)
     except Exception as e:
-        print("❌ Send message failed:", e)
+        print("Lỗi gửi Telegram:", e)
 
-
+# ==== Lấy danh sách sản phẩm từ web ====
 def fetch_products():
-    """Lấy danh sách sản phẩm từ trang web"""
-    products = {}
-    try:
-        res = requests.get(URL, timeout=20)
-        res.raise_for_status()
-    except Exception as e:
-        print("❌ Fetch error:", e)
-        return products
+    r = requests.get(URL, timeout=30)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "html.parser")
 
-    soup = BeautifulSoup(res.text, "html.parser")
-    items = soup.find_all("div", class_="p-4")  # chỉnh selector theo web thực tế
+    products = []
+    items = soup.find_all("div", class_="rounded-lg")
 
     for item in items:
         name_tag = item.find("h2")
-        sold_tag = item.find("span", class_="text-gray-500")
-        remain_tag = item.find("span", class_="text-red-500")
+        h4_tags = item.find_all("h4")
+        if not name_tag or len(h4_tags) < 2:
+            continue
 
-        name = name_tag.text.strip() if name_tag else "Unknown"
-        sold = None
-        remain = None
+        sold_tag = h4_tags[0].find("span")
+        remain_tag = h4_tags[1].find("span")
 
-        if sold_tag:
-            try:
-                sold = int("".join(filter(str.isdigit, sold_tag.text)))
-            except:
-                pass
-        if remain_tag:
-            try:
-                remain = int("".join(filter(str.isdigit, remain_tag.text)))
-            except:
-                pass
+        try:
+            name = name_tag.get_text(strip=True)
+            sold = int(sold_tag.get_text(strip=True).replace(".", "").replace(",", ""))
+            remain = int(remain_tag.get_text(strip=True).replace(".", "").replace(",", ""))
+            products.append({"name": name, "sold": sold, "remain": remain})
+        except:
+            continue
 
-        products[name] = {"sold": sold, "remain": remain}
     return products
 
-
+# ==== Load/Save trạng thái cũ ====
 def load_state():
-    """Đọc trạng thái cũ từ file"""
-    if not os.path.exists(STATE_FILE):
-        return {}
-    try:
+    if os.path.exists(STATE_FILE):
         with open(STATE_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    except:
-        return {}
-
+    return {}
 
 def save_state(state):
-    """Lưu trạng thái mới"""
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
 
-
+# ==== Main ====
 def main():
-    products = fetch_products()
+    try:
+        products = fetch_products()
+    except Exception as e:
+        send_telegram(f"⚠️ Không lấy được dữ liệu sản phẩm!\n{e}")
+        return
+
     if not products:
-        send_message("⚠️ Không lấy được dữ liệu sản phẩm!")
+        send_telegram("⚠️ Không tìm thấy sản phẩm nào!")
         return
 
     state = load_state()
-    event = os.getenv("GITHUB_EVENT_NAME", "")
-
-    # === 1. Luôn gửi báo cáo khi chạy tay hoặc theo lịch ===
-    if event in ["schedule", "workflow_dispatch"]:
-        report_lines = ["📊 *BÁO CÁO TỒN KHO* 📊\n"]
-        for name, data in products.items():
-            line = f"🔹 {name}\n"
-            if data["sold"] is not None:
-                line += f"   • Đã bán: {data['sold']}\n"
-            if data["remain"] is not None:
-                line += f"   • Còn lại: {data['remain']}\n"
-            report_lines.append(line)
-        send_message("\n".join(report_lines))
-
-    # === 2. Báo hết hàng mới hoặc hết ngay lần đầu ===
+    new_state = {}
     alerts = []
-    for name, data in products.items():
-        remain = data["remain"]
-        old_remain = state.get(name, {}).get("remain")
 
-        if remain == 0 and (old_remain is None or old_remain > 0):
-            alerts.append(f"⚠️ *{name}* đã hết nick!")
+    for p in products:
+        name, remain = p["name"], p["remain"]
+        new_state[name] = remain
+        old_remain = state.get(name)
 
+        # Nếu trước còn hàng, giờ = 0 → báo ngay
+        if old_remain is not None and old_remain > 0 and remain == 0:
+            alerts.append(f"🚨 <b>{name}</b> đã <u>hết hàng</u>!")
+
+        # Nếu lần đầu đã thấy nó hết hàng → cũng báo
+        if old_remain is None and remain == 0:
+            alerts.append(f"🚨 <b>{name}</b> hiện đang <u>hết hàng</u>!")
+
+    # Gửi cảnh báo hết hàng ngay lập tức
     if alerts:
-        send_message("\n".join(alerts))
+        send_telegram("\n".join(alerts))
 
-    # === 3. Lưu trạng thái mới ===
-    save_state(products)
+    # Gửi báo cáo tổng hợp vào 12h trưa & 12h đêm hoặc khi chạy tay
+    now = datetime.now()
+    if now.hour in (0, 12) or os.environ.get("MANUAL_RUN") == "1":
+        report_lines = ["📊 <b>Báo cáo tồn kho</b>"]
+        for p in products:
+            report_lines.append(f"- {p['name']}: còn {p['remain']} (đã bán {p['sold']})")
+        send_telegram("\n".join(report_lines))
+
+    save_state(new_state)
 
 
 if __name__ == "__main__":
