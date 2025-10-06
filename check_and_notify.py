@@ -3,72 +3,70 @@ from bs4 import BeautifulSoup
 import json
 import os
 from datetime import datetime
+import pytz
 
-# ==== Config ====
+# ==============================
+# Config
+# ==============================
 BOT_TOKEN = "8265932226:AAE8ki950o1FmQ2voDqIk7UDJaYPIolnWU0"
 CHAT_ID = "7520535840"
-STATE_FILE = "last_state.json"
 URL = "https://cypher289.shop/home"
+STATE_FILE = "last_state.json"
+TZ = pytz.timezone("Asia/Ho_Chi_Minh")
 
-# ==== Gửi tin nhắn Telegram ====
-def send_telegram(message: str):
+# ==============================
+# Helpers
+# ==============================
+def send_telegram(msg: str):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": message, "parse_mode": "HTML"}
     try:
-        requests.post(url, data=payload, timeout=15)
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "HTML"}, timeout=30)
     except Exception as e:
-        print("Lỗi gửi Telegram:", e)
+        print("Telegram error:", e)
 
-# ==== Lấy danh sách sản phẩm từ web ====
 def fetch_products():
     r = requests.get(URL, timeout=30)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "html.parser")
 
     products = []
-    # Lấy toàn bộ div, rồi lọc class có chứa "rounded-lg"
-    for div in soup.find_all("div"):
-        classes = div.get("class", [])
-        if "rounded-lg" not in classes:
-            continue
-
+    # Tìm tất cả div có class chứa "rounded-lg"
+    for div in soup.find_all("div", class_=lambda x: x and "rounded-lg" in x):
         name_tag = div.find("h2")
-        h4_tags = div.find_all("h4")
-        if not name_tag or len(h4_tags) < 2:
-            continue
+        sold_tag = div.find("span", class_="text-primary-500")
+        remain_tag = div.find("span", class_="text-red-500")
 
-        sold_tag = h4_tags[0].find("span")
-        remain_tag = h4_tags[1].find("span")
+        if not name_tag or not sold_tag or not remain_tag:
+            continue
 
         try:
             name = name_tag.get_text(strip=True)
             sold = int(sold_tag.get_text(strip=True).replace(".", "").replace(",", ""))
             remain = int(remain_tag.get_text(strip=True).replace(".", "").replace(",", ""))
             products.append({"name": name, "sold": sold, "remain": remain})
-        except:
+        except Exception:
             continue
 
     return products
 
-# ==== Load/Save trạng thái cũ ====
 def load_state():
     if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return {}
     return {}
 
 def save_state(state):
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
 
-# ==== Main ====
+# ==============================
+# Main logic
+# ==============================
 def main():
-    try:
-        products = fetch_products()
-    except Exception as e:
-        send_telegram(f"⚠️ Không lấy được dữ liệu sản phẩm!\n{e}")
-        return
-
+    products = fetch_products()
     if not products:
         send_telegram("⚠️ Không tìm thấy sản phẩm nào! (parser không match HTML)")
         return
@@ -78,24 +76,27 @@ def main():
     alerts = []
 
     for p in products:
-        name, remain = p["name"], p["remain"]
+        name = p["name"]
+        remain = p["remain"]
         new_state[name] = remain
-        old_remain = state.get(name)
 
+        old_remain = state.get(name, None)
+
+        # Nếu từ >0 chuyển sang =0 thì báo
         if old_remain is not None and old_remain > 0 and remain == 0:
-            alerts.append(f"🚨 <b>{name}</b> đã <u>hết hàng</u>!")
-        if old_remain is None and remain == 0:
-            alerts.append(f"🚨 <b>{name}</b> hiện đang <u>hết hàng</u>!")
+            alerts.append(f"❌ <b>{name}</b> đã <u>hết hàng</u>!")
 
-    if alerts:
-        send_telegram("\n".join(alerts))
+    # Gửi cảnh báo ngay
+    for msg in alerts:
+        send_telegram(msg)
 
-    now = datetime.now()
-    if now.hour in (0, 12) or os.environ.get("MANUAL_RUN") == "1":
-        report_lines = [f"📊 <b>Báo cáo tồn kho ({len(products)} sản phẩm)</b>"]
+    # Check giờ để gửi báo cáo tổng
+    now = datetime.now(TZ)
+    if now.hour in [0, 12] and now.minute < 10:  # chạy trong 10p đầu
+        report = ["📊 <b>Báo cáo tồn kho</b>"]
         for p in products:
-            report_lines.append(f"- {p['name']}: còn {p['remain']} (đã bán {p['sold']})")
-        send_telegram("\n".join(report_lines))
+            report.append(f"{p['name']}: Đã bán {p['sold']} | Còn {p['remain']}")
+        send_telegram("\n".join(report))
 
     save_state(new_state)
 
