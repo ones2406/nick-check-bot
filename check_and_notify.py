@@ -3,9 +3,9 @@ import json
 import requests
 from bs4 import BeautifulSoup
 
-# ==== Config Telegram ====
-TELEGRAM_BOT_TOKEN = os.getenv("8265932226:AAE8ki950o1FmQ2voDqIk7UDJaYPIolnWU0", "")
-CHAT_ID = os.getenv("7520535840", "")
+# ==== Config Telegram (đã gắn trực tiếp) ====
+TELEGRAM_BOT_TOKEN = "8265932226:AAE8ki950o1FmQ2voDqIk7UDJaYPIolnWU0"
+CHAT_ID = "7520535840"   # chat id của bạn (lấy từ JSON)
 
 # ==== Config trang web ====
 URL = "https://shopnick.vnroblox.com/shop/roblox"   # thay link đúng của bạn
