@@ -6,7 +6,7 @@ import pytz
 # Cấu hình bot
 BOT_TOKEN = "8265932226:AAE8ki950o1FmQ2voDqIk7UDJaYPIolnWU0"
 CHAT_ID = "7520535840"
-URL = "https://cypher289.shop/home"
+URL = "https://cypher234.shop/home"
 
 def send_telegram(msg: str):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
