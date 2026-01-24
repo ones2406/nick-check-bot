@@ -7,7 +7,7 @@ import time
 # ========== Cấu hình ==========
 BOT_TOKEN = "8265932226:AAE8ki950o1FmQ2voDqIk7UDJaYPIolnWU0"
 CHAT_ID = "7520535840"
-URL = "https://cypher234.shop/home"
+URL = "https://cypher234.shop"
 # ==============================
 
 def send_telegram(msg: str):
